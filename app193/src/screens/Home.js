@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
-const Home = () => {
+const Home = ({ onOpen }) => {
   const { user } = useAuth();
   const [ocorrencias, setOcorrencias] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -86,7 +86,7 @@ const Home = () => {
                       <TouchableOpacity
                         style={styles.dispatchButton}
                         onPress={async () => {
-                          // tenta despachar via API; se falhar, mostra alerta
+                          // ao clicar, pede detalhes ao backend e abre a tela de detalhe
                           try {
                             const r = await fetch('https://cbm-app-6qeks.ondigitalocean.app/list-occurrence', {
                               method: 'POST',
@@ -95,12 +95,50 @@ const Home = () => {
                             });
                             if (!r.ok) {
                               const t = await r.text().catch(() => r.statusText);
-                              alert('Erro ao despachar: ' + t);
+                              alert('Erro ao obter detalhes: ' + t);
                               return;
                             }
-                            alert('Despacho solicitado para ocorrência ' + item.id);
+                            const data = await r.json().catch(() => null);
+                            // preferir um campo conhecido. O backend pode responder com
+                            // { occurrence } ou { listOccurrence: [...] } ou a própria ocorrência.
+                            let payload = item;
+                            if (data) {
+                              if (data.occurrence && typeof data.occurrence === 'object') {
+                                payload = { ...item, ...data.occurrence };
+                              } else if (Array.isArray(data.listOccurrence) && data.listOccurrence.length > 0) {
+                                // tenta encontrar pela id
+                                const found = data.listOccurrence.find((o) => String(o.id) === String(item.id));
+                                payload = found || data.listOccurrence[0] || item;
+                              } else if (typeof data === 'object' && data.id) {
+                                payload = { ...item, ...data };
+                              } else {
+                                // fallback: keep original item
+                                payload = item;
+                              }
+                            }
+                            // se existir um objeto user dentro da ocorrência, promova suas
+                            // propriedades para o nível superior para facilitar exibição
+                            if (payload && typeof payload === 'object' && payload.user && typeof payload.user === 'object') {
+                              const userObj = payload.user;
+                              Object.entries(userObj).forEach(([k, v]) => {
+                                // evita sobrescrever propriedades já existentes; se existir
+                                // cria user_<prop>
+                                if (!(k in payload)) payload[k] = v;
+                                else payload[`user_${k}`] = v;
+                              });
+                              // removemos o objeto user original após promover as propriedades
+                              try {
+                                delete payload.user;
+                              } catch (e) {
+                                // ignore
+                              }
+                            }
+
+                            if (typeof onOpen === 'function') {
+                              onOpen(payload);
+                            }
                           } catch (e) {
-                            alert('Erro ao despachar: ' + (e.message || e));
+                            alert('Erro ao obter detalhes: ' + (e.message || e));
                           }
                         }}
                       >
@@ -170,6 +208,12 @@ const styles = StyleSheet.create({
   colDescription: {
     flex: 5,
     textAlign: 'left',
+    // allow wrapping and breaking of very long words (helps on web)
+    flexWrap: 'wrap',
+    minWidth: 0,
+    overflowWrap: 'break-word',
+    wordBreak: 'break-word',
+    whiteSpace: 'normal',
   },
   colStatus: {
     flex: 2,
@@ -189,6 +233,7 @@ const styles = StyleSheet.create({
   cell: {
     textAlign: 'center',
     fontSize: 12,
+    flexShrink: 1,
   },
   actionButton: {
     color: '#fff',

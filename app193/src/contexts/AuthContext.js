@@ -10,7 +10,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const raw = localStorage.getItem('authUser');
       if (raw) {
-        setUser(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        // compatibilidade: se só existir username, trate como email também
+        if (parsed && parsed.username && !parsed.email) {
+          parsed.email = parsed.username;
+        }
+        setUser(parsed);
       }
     } catch (e) {
       // ignore
@@ -24,7 +29,7 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Usuário e senha são obrigatórios');
     }
 
-    const userObj = { username };
+    const userObj = { username, email: username };
     setUser(userObj);
     try {
       localStorage.setItem('authUser', JSON.stringify(userObj));
