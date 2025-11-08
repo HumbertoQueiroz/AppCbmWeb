@@ -8,9 +8,7 @@ const Home = () => {
   const [ocorrencias, setOcorrencias] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [victimsModalVisible, setVictimsModalVisible] = useState(false);
-  const [victimsData, setVictimsData] = useState(null);
-  const [victimsLoading, setVictimsLoading] = useState(false);
+  
 
   useEffect(() => {
     const fetchList = async () => {
@@ -18,7 +16,7 @@ const Home = () => {
       setLoading(true);
       setError(null);
       try {
-        const resp = await fetch('http://localhost:8080/list-occurrence', {
+        const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/list-occurrence', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: user.email }),
@@ -57,9 +55,9 @@ const Home = () => {
               <Text style={[styles.headerText, styles.colInformante]}>Informante</Text>
               <Text style={[styles.headerText, styles.colNatureza]}>Natureza</Text>
               <Text style={[styles.headerText, styles.colVictim]}>Vítima</Text>
-              <Text style={[styles.headerText, styles.colDescription]}>Descrição</Text>
+              <Text style={[styles.headerText, styles.colDescription, {textAlign: 'center'}]}>Descrição</Text>
               <Text style={[styles.headerText, styles.colStatus]}>Status</Text>
-              <Text style={[styles.headerText, styles.colAction]}>Atender</Text>
+              <Text style={[styles.headerText, styles.colAction]}>Ações</Text>
             </View>
             {ocorrencias.length === 0 && !loading ? (
               <View style={styles.tableRow}>
@@ -81,49 +79,8 @@ const Home = () => {
                     <Text style={[styles.cell, styles.colDate]}>{dateStr}</Text>
                     <Text style={[styles.cell, styles.colInformante]}>{informante}</Text>
                     <Text style={[styles.cell, styles.colNatureza]}>{item.natOco || item.nature || '-'}</Text>
-                    {item.hasVictim ? (
-                      <TouchableOpacity
-                        onPress={async () => {
-                          const count = item.victimsQuantity || (item.victims ? item.victims.length : '-');
-                          // se já tem dados de vítimas no item, mostra direto
-                          if (item.victims && item.victims.length) {
-                            setVictimsData(item.victims);
-                            setVictimsModalVisible(true);
-                            return;
-                          }
-                          // tenta buscar detalhes das vítimas via API
-                          try {
-                            setVictimsLoading(true);
-                            const r = await fetch('http://localhost:8080/list-occurrence', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ id: item.id, email: user.email }),
-                            });
-                            if (!r.ok) {
-                              const t = await r.text().catch(() => r.statusText);
-                              setVictimsData([{ label: 'Erro', value: t }]);
-                              setVictimsModalVisible(true);
-                              return;
-                            }
-                            const d = await r.json();
-                            const victims = d.victims || d.list || d.data || [];
-                            setVictimsData(victims);
-                            setVictimsModalVisible(true);
-                          } catch (e) {
-                            setVictimsData([{ label: 'Erro', value: e.message || String(e) }]);
-                            setVictimsModalVisible(true);
-                          } finally {
-                            setVictimsLoading(false);
-                          }
-                        }}
-                        style={[styles.cell, {minWidth:80}]}
-                      >
-                        <Text style={[styles.cell, styles.victimYes]}>{`Sim (${item.victimsQuantity || (item.victims ? item.victims.length : '-')})`}</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <Text style={[styles.cell, styles.victimNo, {minWidth:80}]}>Não</Text>
-                    )}
-                    <Text style={[styles.cell, styles.colDescription]} title='teste'>{desc}</Text>
+                    <Text style={[styles.cell, item.hasVictim ? styles.victimYes : styles.victimNo,{minWidth:80, marginHorizontal:10}]}>{item.hasVictim ? `Sim (${item.victimsQuantity || (item.victims ? item.victims.length : '-')})` : 'Não'}</Text>
+                    <Text style={[styles.cell, styles.colDescription]}>{desc}</Text>
                     <Text style={[styles.cell, styles.colStatus]}>{item.statusOccurrence || '-'}</Text>
                     <View style={[styles.cell, styles.colAction]}>
                       <TouchableOpacity
@@ -131,7 +88,7 @@ const Home = () => {
                         onPress={async () => {
                           // tenta despachar via API; se falhar, mostra alerta
                           try {
-                            const r = await fetch('http://localhost:8080/list-occurrence', {
+                            const r = await fetch('https://cbm-app-6qeks.ondigitalocean.app/list-occurrence', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ id: item.id, email: user.email }),
@@ -147,7 +104,7 @@ const Home = () => {
                           }
                         }}
                       >
-                        <Text style={styles.dispatchText}>Despachar</Text>
+                        <Text style={styles.dispatchText}>Atender</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -156,33 +113,7 @@ const Home = () => {
             )}
         </View>
       </ScrollView>
-      {victimsModalVisible && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Detalhes das vítimas</Text>
-            {victimsLoading && <Text>Carregando...</Text>}
-            {!victimsLoading && victimsData && victimsData.length === 0 && <Text>Nenhuma informação de vítima disponível.</Text>}
-            {!victimsLoading && victimsData && victimsData.length > 0 && (
-              <ScrollView style={{ maxHeight: 300 }}>
-                {victimsData.map((v, idx) => (
-                  <View key={idx} style={{ marginBottom: 10 }}>
-                    {typeof v === 'string' ? (
-                      <Text style={styles.modalText}>{v}</Text>
-                    ) : v && v.label && v.value ? (
-                      <Text style={styles.modalText}><Text style={{ fontWeight: '700' }}>{v.label}: </Text>{v.value}</Text>
-                    ) : (
-                      <Text style={styles.modalText}>{JSON.stringify(v)}</Text>
-                    )}
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-            <TouchableOpacity style={styles.modalClose} onPress={() => setVictimsModalVisible(false)}>
-              <Text style={styles.modalCloseText}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      
     </View>
   );
 };
@@ -217,35 +148,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   colNumero: {
-    flex:1,
+    flex: 1,
     textAlign: 'center',
   },
   colDate: {
-    flex:2,
+    flex: 2,
     textAlign: 'center',
   },
   colInformante: {
-    flex:2,
+    flex: 3,
     textAlign: 'center',
   },
   colNatureza: {
-    flex:2,
+    flex: 2,
     textAlign: 'center',
   },
   colVictim: {
-    flex:2,
+    flex: 1,
     textAlign: 'center',
   },
   colDescription: {
-    flex:5,
+    flex: 5,
     textAlign: 'left',
   },
   colStatus: {
-    flex:2,
+    flex: 2,
     textAlign: 'center',
   },
   colAction: {
-    flex:2,
+    flex: 2,
     textAlign: 'center',
   },
   tableRow: {
@@ -291,46 +222,6 @@ const styles = StyleSheet.create({
   victimNo: {
     color: '#000',
     textAlign: 'center',
-  },
-  modalOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 9999,
-  },
-  modalCard: {
-    width: '80%',
-    maxHeight: '80%',
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 8,
-    overflow: 'auto',
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  modalText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  modalClose: {
-    marginTop: 12,
-    backgroundColor: '#c8102e',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    alignSelf: 'flex-end',
-  },
-  modalCloseText: {
-    color: '#fff',
-    fontWeight: '700',
   },
 });
 
