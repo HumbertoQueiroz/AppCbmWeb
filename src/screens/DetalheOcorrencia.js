@@ -2,14 +2,6 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import Span from '../components/Span';
 
-const formatValue = (v) => {
-  if (v === null || v === undefined) return '-';
-  if (typeof v === 'object') return JSON.stringify(v, null, 2);
-  return String(v);
-};
-
-// renderFields removed; DetalheOcorrencia now renders top-level props only
-
 const DetalheOcorrencia = ({ item, onBack }) => {
   const data = item || {};
   return (
