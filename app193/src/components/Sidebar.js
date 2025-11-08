@@ -1,8 +1,11 @@
 // src/components/Sidebar.js
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
 
 const Sidebar = ({ onSelectScreen }) => {
+  const { logout } = useAuth();
+
   return (
     <View style={styles.container}>
       <Text style={styles.menuTitle}>Menu</Text>
@@ -28,10 +31,9 @@ const Sidebar = ({ onSelectScreen }) => {
         <TouchableOpacity style={styles.menuItem}>
           <Text style={styles.menuText}>Minha conta</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={logout}>
           <Text style={styles.menuText}>Sair</Text>
         </TouchableOpacity>
-        
       </View>
     </View>
   );

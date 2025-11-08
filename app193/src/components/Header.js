@@ -1,14 +1,17 @@
 // src/components/Header.js
 import React from 'react';
 import { View, Text, StyleSheet, Image,TouchableOpacity } from 'react-native';
+import { useAuth } from '../contexts/AuthContext';
 
 const Header = ({ title, onMenuPress }) => { // Receba uma nova propriedade
+  const { user } = useAuth();
+
   return (
     <View style={styles.container}>
       <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
         <Text style={styles.menuText}>☰</Text>
       </TouchableOpacity>
-      <Text style={styles.text}>Bem vindo Alisson!</Text>
+      <Text style={styles.text}>{user ? `Bem vindo ${user.email}` : 'Bem vindo'}</Text>
       <Image
         source={require('../assets/CBMMT_00.png')}
         style={styles.logo}
@@ -52,6 +55,16 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
+  },
+  logoutButton: {
+    marginLeft: 12,
+    padding: 6,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 4,
+  },
+  logoutText: {
+    color: 'white',
+    fontWeight: '600',
   },
 });
 
