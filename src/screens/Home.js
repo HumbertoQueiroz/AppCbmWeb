@@ -254,6 +254,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 12,
+    width: 50,
+    textAlign: 'center',
   },
   victimYes: {
     backgroundColor: 'rgba(200,0,0,0.5)',
