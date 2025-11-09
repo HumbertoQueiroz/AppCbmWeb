@@ -8,8 +8,7 @@ const Home = ({ onOpen }) => {
   const [ocorrencias, setOcorrencias] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-
+ 
   useEffect(() => {
     const fetchList = async () => {
       if (!user || !user.email) return;
@@ -142,7 +141,7 @@ const Home = ({ onOpen }) => {
                           }
                         }}
                       >
-                        <Text style={styles.dispatchText}>Atender</Text>
+                        <Text style={styles.dispatchText}>Acessar</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -159,7 +158,6 @@ const Home = ({ onOpen }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 50,
   },
   title: {
     fontSize: 25,
@@ -222,6 +220,8 @@ const styles = StyleSheet.create({
   colAction: {
     flex: 2,
     textAlign: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tableRow: {
     flexDirection: 'row',
@@ -234,31 +234,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     flexShrink: 1,
-  },
-  actionButton: {
-    color: '#fff',
-    backgroundColor: 'red',
-    padding: 5,
-    borderRadius: 5,
-    width: 50,
-    textAlign: 'center',
-  },
+  },  
   dispatchButton: {
-    backgroundColor: '#c8102e',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(200, 0, 0, 0.7)',
     borderRadius: 4,
     alignSelf: 'center',
+    minWidth: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 30,
   },
   dispatchText: {
     color: '#fff',
     fontWeight: '700',
     fontSize: 12,
-    width: 50,
     textAlign: 'center',
   },
   victimYes: {
-    backgroundColor: 'rgba(200,0,0,0.5)',
+    backgroundColor: 'rgba(200, 0, 0, 0.7)',
     color: '#fff',
     paddingVertical: 6,
     paddingHorizontal: 8,
