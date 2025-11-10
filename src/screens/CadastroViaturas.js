@@ -45,7 +45,7 @@ const CadastroViatura = ({ onSuccess, onCancel }) => {
     if (description) payload.description = description;
 
     try {
-      const resp = await fetch('http://localhost:8080/create-vehicle', {
+      const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/create-vehicle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
