@@ -1,8 +1,9 @@
 // src/screens/CadastroViatura.js
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { useAuth } from '../contexts/AuthContext';
 
-const CadastroViatura = () => {
+const CadastroViatura = ({ onSuccess, onCancel }) => {
   const [placa, setPlaca] = useState("");
   const [modelo, setModelo] = useState("");
   const [ano, setAno] = useState("");
@@ -17,12 +18,58 @@ const CadastroViatura = () => {
     setCor("");
     setTipo("");
     setStatus("");
+    // if a cancel handler was provided by the parent, call it to navigate back
+    try {
+      if (typeof onCancel === 'function') onCancel();
+    } catch (e) {
+      // ignore
+    }
   };
 
-  const handleCadastrar = () => {
-    const novaViatura = { placa, modelo, ano, cor, tipo, status };
-    console.log("🚒 Viatura cadastrada:", novaViatura);
-    // aqui você pode chamar sua API/Backend para salvar no banco
+  const { user } = useAuth();
+
+  const handleCadastrar = async () => {
+    // Monta description com cor, ano e status conforme solicitado
+    const descriptionParts = [];
+    if (cor) descriptionParts.push(`Cor: ${cor}`);
+    if (ano) descriptionParts.push(`Ano: ${ano}`);
+    if (status) descriptionParts.push(`Status: ${status}`);
+    const description = descriptionParts.join('; ');
+
+    const payload = {
+      email: user?.email || '',
+      placa: placa,
+      type: tipo,
+      model: modelo,
+    };
+    if (description) payload.description = description;
+
+    try {
+      const resp = await fetch('http://localhost:8080/create-vehicle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => resp.statusText);
+        alert('Erro ao cadastrar viatura: ' + (text || resp.status));
+        return;
+      }
+      const data = await resp.json().catch(() => null);
+      alert('Viatura cadastrada com sucesso');
+      console.log('create-vehicle response', data);
+      // limpa campos
+      handleCancelar();
+      // navega de volta para a tela inicial se houver handler
+      try {
+        if (typeof onSuccess === 'function') onSuccess();
+      } catch (e) {
+        // ignore
+      }
+    } catch (e) {
+      console.error('Falha ao chamar create-vehicle', e);
+      alert('Falha ao cadastrar viatura: ' + (e.message || e));
+    }
   };
 
   return (

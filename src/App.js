@@ -39,7 +39,7 @@ const App = () => {
     case 'RelatorioOcorrencia':
       return <RelatorioOcorrencia />;
     case 'CadastroViatura':
-      return <CadastroViatura />;
+      return <CadastroViatura onSuccess={() => { setCurrentScreen('Home'); }} onCancel={() => { setCurrentScreen('Home'); }} />;
     case 'DetalheOcorrencia':
       return <DetalheOcorrencia item={selectedOccurrence} onBack={() => setCurrentScreen('Home')} />;
     default:

@@ -30,7 +30,6 @@ const Home = ({ onOpen }) => {
         // espera que o backend retorne { listOccurrence: [...] } ou similar
         const list = data.listOccurrence || data.list || [];
         setOcorrencias(list || []);
-        console.log(list);
       } catch (e) {
         setError(e.message || 'Erro ao carregar');
       } finally {
