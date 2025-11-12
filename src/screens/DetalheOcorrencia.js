@@ -52,7 +52,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
     setLoading(true);
     try {
   const email = encodeURIComponent(user?.email || '');
-  const url = `http://localhost:8080/list-vehicles${email ? `?email=${email}` : ''}`;
+  const url = `https://cbm-app-6qeks.ondigitalocean.app/list-vehicles${email ? `?email=${email}` : ''}`;
   const resp = await fetch(url);
       if (!resp.ok) {
         console.warn('Erro ao buscar veículos:', resp.status);
@@ -134,7 +134,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
         description: observation || '',
       };
 
-      const resp = await fetch('http://localhost:8080/respond-occurrence', {
+      const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/respond-occurrence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -187,7 +187,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
         console.log('Marking trote for occurrence', user);
         const payload = { email: user.email || '', occurrenceId: Number(data.id) || data.id , value: !data.isTrote};
         try {
-          const resp = await fetch('http://localhost:8080/trote', {
+          const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/trote', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
           });
           if (!resp.ok) {
@@ -236,7 +236,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
             setTroteSending(true);
             const payload = { email: user?.email || '', occurrenceId: Number(data.id) || data.id, value: !data.isTrote };
             try {
-              const resp = await fetch('http://localhost:8080/trote', {
+              const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/trote', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
               });
               if (!resp.ok) {

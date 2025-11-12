@@ -39,7 +39,7 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
     setError(null);
     try {
       const email = encodeURIComponent(user?.email || '');
-      const url = `http://localhost:8080/incident-response/${occurrenceId}/responses${email ? `?email=${email}` : ''}`;
+      const url = `https://cbm-app-6qeks.ondigitalocean.app/incident-response/${occurrenceId}/responses${email ? `?email=${email}` : ''}`;
       const resp = await fetch(url);
       if (!resp.ok) {
         const txt = await resp.text().catch(() => resp.statusText);
@@ -106,7 +106,7 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
       if (markArrivalHospital) payload.dateArrivalHospital = true;
       if (markReturnVehicle) payload.dateReturn = true;
 
-      const resp = await fetch('http://localhost:8080/create-status', {
+      const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/create-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

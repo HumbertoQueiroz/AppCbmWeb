@@ -23,7 +23,7 @@ const Login = () => {
     try {
       if (!username.trim() || !password) throw new Error('Preencha usuário e senha');
 
-      const resp = await fetch('http://localhost:8080/login-admin', {
+      const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/login-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: username.trim(), password }),
