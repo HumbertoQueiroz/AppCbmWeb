@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import Span from '../components/Span';
+import IncidentResponses from './IncidentResponses';
 
 const formatCPF = (v) => {
   if (v === null || v === undefined) return '-';
@@ -27,6 +28,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
   const [sending, setSending] = useState(false);
   const [observation, setObservation] = useState('');
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [troteSending, setTroteSending] = useState(false);
 
   const openModal = async () => {
     setObservation('');
@@ -50,7 +52,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
     setLoading(true);
     try {
   const email = encodeURIComponent(user?.email || '');
-  const url = `https://cbm-app-6qeks.ondigitalocean.app/list-vehicles${email ? `?email=${email}` : ''}`;
+  const url = `http://localhost:8080/list-vehicles${email ? `?email=${email}` : ''}`;
   const resp = await fetch(url);
       if (!resp.ok) {
         console.warn('Erro ao buscar veículos:', resp.status);
@@ -132,7 +134,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
         description: observation || '',
       };
 
-      const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/respond-occurrence', {
+      const resp = await fetch('http://localhost:8080/respond-occurrence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -168,6 +170,109 @@ const DetalheOcorrencia = ({ item, onBack }) => {
     }
   };
 
+  const handleTrote = () => {
+    const isWeb = typeof window !== 'undefined' && typeof window.confirm === 'function';
+
+    if (isWeb) {
+      let textAlertTrote='';
+      if(!data.isTrote){
+        textAlertTrote='Deseja marcar esta ocorrência como trote?';
+      } else {
+        textAlertTrote='Deseja retirar o status de trote desta ocorrência?';
+      }
+      const confirmed = window.confirm(textAlertTrote);
+      if (!confirmed) return;
+      (async () => {
+        setTroteSending(true);
+        console.log('Marking trote for occurrence', user);
+        const payload = { email: user.email || '', occurrenceId: Number(data.id) || data.id , value: !data.isTrote};
+        try {
+          const resp = await fetch('http://localhost:8080/trote', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+          });
+          if (!resp.ok) {
+            const text = await resp.text().catch(() => resp.statusText);
+            window.alert('Erro ao marcar trote: ' + (text || resp.status));
+            return;
+          }
+
+          // try to read server response to know resulting trote state
+          const respData = await resp.json().catch(() => null);
+          const detectMarked = (d) => {
+            if (!d || typeof d !== 'object') return null;
+            const keys = ['trote','isTrote','marked','isMarked','value'];
+            for (const k of keys) if (Object.prototype.hasOwnProperty.call(d,k)) return Boolean(d[k]);
+            return null;
+          };
+          const resulting = detectMarked(respData);
+          // if backend didn't return explicit state, fallback to what we asked
+          const finalState = resulting === null ? Boolean(payload.value) : resulting;
+
+          if (finalState) {
+            window.alert('Ocorrência marcada como trote com sucesso');
+            try { if (typeof onBack === 'function') onBack(); } catch (e) { }
+          } else {
+            window.alert('Ocorrência desmarcada como trote');
+            data.isTrote = !data.isTrote;
+            // remain on same screen
+          }
+        } catch (e) {
+          console.error('Falha ao marcar trote', e);
+          window.alert('Falha ao marcar trote: ' + (e.message || e));
+        } finally { setTroteSending(false); }
+      })();
+      return;
+    }
+
+    // React Native path
+    Alert.alert(
+      'Confirmar Trote',
+      'Deseja marcar esta ocorrência como trote?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sim',
+          onPress: async () => {
+            setTroteSending(true);
+            const payload = { email: user?.email || '', occurrenceId: Number(data.id) || data.id, value: !data.isTrote };
+            try {
+              const resp = await fetch('http://localhost:8080/trote', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+              });
+              if (!resp.ok) {
+                const text = await resp.text().catch(() => resp.statusText);
+                Alert.alert('Erro', 'Erro ao marcar trote: ' + (text || resp.status));
+                return;
+              }
+
+              const respData = await resp.json().catch(() => null);
+              const detectMarked = (d) => {
+                if (!d || typeof d !== 'object') return null;
+                const keys = ['trote','isTrote','marked','isMarked','value'];
+                for (const k of keys) if (Object.prototype.hasOwnProperty.call(d,k)) return Boolean(d[k]);
+                return null;
+              };
+              const resulting = detectMarked(respData);
+              const finalState = resulting === null ? Boolean(payload.value) : resulting;
+
+              if (finalState) {
+                Alert.alert('Sucesso', 'Ocorrência marcada como trote com sucesso');
+                try { if (typeof onBack === 'function') onBack(); } catch (e) { }
+              } else {
+                Alert.alert('Sucesso', 'Ocorrência desmarcada como trote');
+                // stay on same screen
+              }
+            } catch (e) {
+              console.error('Falha ao marcar trote', e);
+              Alert.alert('Erro', 'Falha ao marcar trote: ' + (e.message || e));
+            } finally { setTroteSending(false); }
+          }
+        }
+      ],
+      { cancelable: true }
+    );
+  };
+
   const listData = [{ id: 'none', displayName: 'Sem deslocamento de veículo', noVehicle: true }, ...vehicles.map((v, idx) => ({ id: v.id || `v-${idx}`, ...v }))];
   // derive selected vehicle objects for display in confirmation
   const selectedVehicles = selectedVehicleIds
@@ -176,14 +281,25 @@ const DetalheOcorrencia = ({ item, onBack }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Detalhe da Ocorrência numero: {data.id}</Text>
-        <TouchableOpacity onPress={() => onBack && onBack()} style={styles.backButton}>
-          <Text style={[styles.backText]}>Voltar</Text>
-        </TouchableOpacity>
-      </View>
       <ScrollView style={styles.body}>
-        <View style={styles.card}>
+        {data.isTrote && (
+          <View style={{backgroundColor:'#ffcccc', padding:24, borderRadius:6, margin:4}}>
+            <Text style={{color:'#900', fontWeight:'700', fontSize:24, textAlign:'center'}}>Esta ocorrência foi marcada como trote.</Text>
+          </View>
+        )}
+        <View style={styles.cardRed}>
+          <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'space-between'}}>
+            <Text style={styles.title}>Detalhe da Ocorrência numero: {data.id}</Text>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={handleTrote} style={styles.backButton} disabled={troteSending}>
+                {troteSending ? <ActivityIndicator color="#fff" /> : <Text style={[styles.backText]}>Trote</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => onBack && onBack()} style={styles.backButton}>
+                <Text style={[styles.backText]}>Voltar</Text>
+              </TouchableOpacity>
+
+            </View>
+          </View>
           <View style={styles.list}>
             {Object.keys(data).length === 0 ? (
               <View style={styles.row}>
@@ -330,6 +446,14 @@ const DetalheOcorrencia = ({ item, onBack }) => {
             </Modal>
           </View>
         )}
+        {}
+        {/* render incident responses when occurrence is not in REGISTRADO state */}
+        {data.statusOccurrence && data.statusOccurrence !== 'REGISTRADO' && (
+          <View style={styles.cardYellow}>
+            <IncidentResponses occurrenceId={data.id} onBack={() => onBack && onBack()} />
+          </View>
+        )}
+
       </ScrollView>
     </View>
   );
@@ -338,14 +462,20 @@ const DetalheOcorrencia = ({ item, onBack }) => {
 const styles = StyleSheet.create({
   container: { flex: 1,},
   header: { flexDirection: 'row', alignItems: 'center',justifyContent:'space-between', marginBottom: 12, marginLeft:16 },
-  backButton: { padding: 8, backgroundColor: '#b6b6b6ff', borderRadius: 6, marginRight: 12},
-  backText: {color: '#ffffffff', paddingHorizontal: 10, paddingVertical: 5},
-  title: { fontSize: 24, fontWeight: '700' },
+  backButton: { padding: 4, backgroundColor: '#a09f9fff', borderRadius: 6, marginRight: 12},
+  backText: {color: '#ffffffff', paddingHorizontal: 10, paddingVertical: 2, fontWeight: '600'},
+  title: { fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 12, flex:9},
   body: { marginTop: 8 },
-  card: {
+  cardRed: {
     margin: 15,
     borderRadius: 10,
     backgroundColor: 'rgba(200,16,46,0.2)',
+    padding: 24,
+  },
+  cardYellow: {
+    margin: 15,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,0,0.2)',
     padding: 12,
   },
   list: {

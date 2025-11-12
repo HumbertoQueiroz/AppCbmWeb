@@ -15,7 +15,7 @@ const Home = ({ onOpen }) => {
       setLoading(true);
       setError(null);
       try {
-        const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/list-occurrence', {
+        const resp = await fetch('http://localhost:8080/list-occurrence', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: user.email }),
@@ -86,7 +86,7 @@ const Home = ({ onOpen }) => {
                         onPress={async () => {
                           // ao clicar, pede detalhes ao backend e abre a tela de detalhe
                           try {
-                            const r = await fetch('https://cbm-app-6qeks.ondigitalocean.app/list-occurrence', {
+                            const r = await fetch('http://localhost:8080/list-occurrence', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ id: item.id, email: user.email }),
