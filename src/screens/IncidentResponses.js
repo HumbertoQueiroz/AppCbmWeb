@@ -29,13 +29,7 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
   const [markArrivalOccurrence, setMarkArrivalOccurrence] = useState(false);
   const [markArrivalHospital, setMarkArrivalHospital] = useState(false);
   const [markReturnVehicle, setMarkReturnVehicle] = useState(false);
-  // labels usados para prefixar a descrição quando um switch estiver ativo
-  const switchLabels = {
-    markArrivalOccurrence: 'Chegada ao local da ocorrência',
-    markArrivalHospital: 'Chegada ao hospital',
-    markReturnVehicle: 'Retorno do veículo'
-  };
-
+  
   const fetchResponses = async () => {
     if (!occurrenceId) {
       setError('occurrenceId não informado');
