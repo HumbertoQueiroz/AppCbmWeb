@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, ActivityIndicator, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, FlatList, ActivityIndicator, TextInput, Alert, Switch, Linking } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import Span from '../components/Span';
 import IncidentResponses from './IncidentResponses';
@@ -29,6 +29,37 @@ const DetalheOcorrencia = ({ item, onBack }) => {
   const [observation, setObservation] = useState('');
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [troteSending, setTroteSending] = useState(false);
+  // estados para finalização
+  const [finalModalVisible, setFinalModalVisible] = useState(false);
+  const [finalSending, setFinalSending] = useState(false);
+  const [finalDescription, setFinalDescription] = useState('');
+  const [selectedIncidentResponseId, setSelectedIncidentResponseId] = useState(null);
+  const [finalResponses, setFinalResponses] = useState([]);
+  const [finalMarkArrivalOccurrence, setFinalMarkArrivalOccurrence] = useState(false);
+  const [finalMarkArrivalHospital, setFinalMarkArrivalHospital] = useState(false);
+  const [finalMarkReturnVehicle, setFinalMarkReturnVehicle] = useState(false);
+  const [finalMode, setFinalMode] = useState('finalize'); // 'finalize' | 'reopen'
+  // WhatsApp modal / input
+  const [whatsappModalVisible, setWhatsappModalVisible] = useState(false);
+  const [whatsappNumberDisplay, setWhatsappNumberDisplay] = useState('');
+  const [whatsappNumberRaw, setWhatsappNumberRaw] = useState('');
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+
+  const formatBRPhone = (digits) => {
+    // digits: string with only numbers, without country code
+    // expected to format as (AA)99999-9999 for 11-digit numbers (area+9-digit mobile)
+    const d = String(digits || '').replace(/\D/g, '');
+    // if starts with country code 55, remove it for display
+    let s = d;
+    if (s.startsWith('55')) s = s.slice(2);
+    // keep only up to 11 digits (2 area + 9 number) or fallback to available
+    const max = 11;
+    const trimmed = s.slice(0, max);
+    if (trimmed.length <= 2) return `(${trimmed}`;
+    if (trimmed.length <= 6) return `(${trimmed.slice(0,2)})${trimmed.slice(2)}`;
+    if (trimmed.length <= 10) return `(${trimmed.slice(0,2)})${trimmed.slice(2,6)}-${trimmed.slice(6)}`;
+    return `(${trimmed.slice(0,2)})${trimmed.slice(2,7)}-${trimmed.slice(7,11)}`;
+  };
 
   const openModal = async () => {
     setObservation('');
@@ -70,6 +101,101 @@ const DetalheOcorrencia = ({ item, onBack }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // abre modal de finalização e busca incident responses para seleção
+  const openFinalModal = async (mode = 'finalize') => {
+    setFinalDescription('');
+    setSelectedIncidentResponseId(null);
+    setFinalMarkArrivalOccurrence(false);
+    setFinalMarkArrivalHospital(false);
+    setFinalMarkReturnVehicle(false);
+    setFinalMode(mode);
+    setFinalModalVisible(true);
+    try {
+      const email = encodeURIComponent(user?.email || '');
+      const url = `https://cbm-app-6qeks.ondigitalocean.app/incident-response/${data.id}/responses${email ? `?email=${email}` : ''}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        setFinalResponses([]);
+        setSelectedIncidentResponseId(null);
+        return;
+      }
+      const d = await resp.json().catch(() => null);
+      if (Array.isArray(d)) {
+        setFinalResponses(d);
+        // pré-seleciona a primeira resposta retornada (atendimento atual)
+        setSelectedIncidentResponseId(d.length > 0 ? d[0].id : null);
+      } else {
+        setFinalResponses([]);
+        setSelectedIncidentResponseId(null);
+      }
+    } catch (e) {
+      console.warn('Erro ao buscar respostas para finalização', e);
+      setFinalResponses([]);
+      setSelectedIncidentResponseId(null);
+    }
+  };
+
+  const handleSendFinalization = async () => {
+    const isWeb = typeof window !== 'undefined' && typeof window.confirm === 'function';
+    const isReopen = finalMode === 'reopen';
+
+    if (!finalDescription || String(finalDescription).trim().length === 0) {
+      if (isWeb) window.alert(isReopen ? 'Preencha o motivo da reabertura' : 'Preencha a descrição da finalização');
+      else Alert.alert('Preencha', isReopen ? 'Preencha o motivo da reabertura' : 'Preencha a descrição da finalização');
+      return;
+    }
+    if (!selectedIncidentResponseId) {
+      if (isWeb) window.alert(isReopen ? 'Nenhum atendimento disponível para reabertura' : 'Nenhum atendimento disponível para finalização');
+      else Alert.alert('Atenção', isReopen ? 'Nenhum atendimento disponível para reabertura' : 'Nenhum atendimento disponível para finalização');
+      return;
+    }
+
+    const confirmTextWeb = isReopen ? 'Confirma a reabertura desta ocorrência?' : 'Confirma a finalização desta ocorrência?';
+    const confirmTextNative = isReopen ? 'Confirma a reabertura desta ocorrência?' : 'Confirma a finalização desta ocorrência?';
+    const proceed = isWeb ? window.confirm(confirmTextWeb) : await new Promise((res) => {
+      Alert.alert('Confirmar', confirmTextNative, [
+        { text: 'Cancelar', style: 'cancel', onPress: () => res(false) },
+        { text: 'Sim', onPress: () => res(true) }
+      ], { cancelable: true });
+    });
+    if (!proceed) return;
+
+    setFinalSending(true);
+    try {
+      const isReopen = finalMode === 'reopen';
+      const payload = {
+        email: user?.email || '',
+        incidentResponseId: Number(selectedIncidentResponseId),
+        statusIncidentResponse: 'FINALIZACAO',
+        description: String(finalDescription).trim(),
+        finalize: isReopen ? false : true,
+      };
+      if (finalMarkArrivalOccurrence) payload.dateArrivalOccurrence = true;
+      if (finalMarkArrivalHospital) payload.arrivalHospital = true;
+      if (finalMarkReturnVehicle) payload.dateReturn = true;
+
+      const resp = await fetch('https://cbm-app-6qeks.ondigitalocean.app/finished-occurrence', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => resp.statusText);
+        if (isWeb) window.alert((isReopen ? 'Erro ao reabrir: ' : 'Erro ao finalizar: ') + (txt || resp.status));
+        else Alert.alert('Erro', (isReopen ? 'Erro ao reabrir: ' : 'Erro ao finalizar: ') + (txt || resp.status));
+        return;
+      }
+
+      if (isWeb) window.alert(isReopen ? 'Reabertura enviada com sucesso' : 'Finalização enviada com sucesso');
+      else Alert.alert('Sucesso', isReopen ? 'Reabertura enviada com sucesso' : 'Finalização enviada com sucesso');
+      setFinalModalVisible(false);
+      try { if (typeof onBack === 'function') onBack(); } catch (e) { }
+    } catch (e) {
+      console.error(isReopen ? 'Falha ao enviar reabertura' : 'Falha ao enviar finalização', e);
+      if (typeof window !== 'undefined' && window.alert) window.alert((isReopen ? 'Falha ao enviar reabertura: ' : 'Falha ao enviar finalização: ') + (e.message || e));
+      else Alert.alert('Erro', (isReopen ? 'Falha ao enviar reabertura: ' : 'Falha ao enviar finalização: ') + (e.message || e));
+    } finally { setFinalSending(false); }
   };
 
   const handleSelect = (item) => {
@@ -273,6 +399,92 @@ const DetalheOcorrencia = ({ item, onBack }) => {
     );
   };
 
+  const openInMaps = () => {
+    // prefer coordinates when available
+    const lat = data.geoLat || data.lat || data.latitude || null;
+    const lon = data.geoLong || data.long || data.longitude || null;
+    let url = '';
+    const hasCoords = lat !== null && lat !== undefined && lon !== null && lon !== undefined && String(lat).trim() !== '' && String(lon).trim() !== '';
+    if (hasCoords) {
+      // normalize decimals (strings expected)
+      const latS = String(lat).trim();
+      const lonS = String(lon).trim();
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(latS + ',' + lonS)}`;
+    } else {
+      // fallback to textual address
+      const address = `${data.addressLog ? `${data.addressLog}, ` : ''}${data.addressNum? `${data.addressNum}, ` : ''}${data.addressComp ? `${data.addressComp}, ` : ''}${data.addressBairro? `${data.addressBairro}, ` : ''}${data.addressCity? `${data.addressCity}, ` : ''}${data.addressState? `${data.addressState}, ` : ''}${data.addressCEP? `${data.addressCEP}` : ''}`.trim();
+      if (!address || address.length === 0) {
+        Alert.alert('Endereço não disponível', 'Não há coordenadas nem endereço para abrir no mapa.');
+        return;
+      }
+      url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    }
+
+    const isWeb = typeof window !== 'undefined' && typeof window.open === 'function';
+    try {
+      if (isWeb) window.open(url, '_blank');
+      else Linking.openURL(url);
+    } catch (e) {
+      console.error('Erro ao abrir maps', e);
+      Alert.alert('Erro', 'Não foi possível abrir o mapa: ' + (e.message || e));
+    }
+  };
+
+  const sendWhatsApp = async () => {
+    // require phone number raw digits
+    const raw = String(whatsappNumberRaw || '').replace(/\D/g, '');
+    if (!raw) {
+      Alert.alert('Número inválido', 'Informe o número de telefone para envio (com código do país ou DDD).');
+      return;
+    }
+
+    // ensure country code 55 is prefixed
+    let withCountry = raw;
+    if (!withCountry.startsWith('55')) {
+      withCountry = '55' + withCountry;
+    }
+
+    // basic length check (country + area + number) -> at least 10 digits without country, so >=12 with 55
+    if (withCountry.length < 12) {
+      Alert.alert('Número inválido', 'Número muito curto. Verifique o DDD e o número (ex: (65)99999-9999).');
+      return;
+    }
+
+    // build map url same as openInMaps, normalizing decimal comma
+    const latRaw = data.geoLat || data.lat || data.latitude || null;
+    const lonRaw = data.geoLong || data.long || data.longitude || null;
+    const lat = latRaw !== null && latRaw !== undefined ? String(latRaw).replace(',', '.').trim() : '';
+    const lon = lonRaw !== null && lonRaw !== undefined ? String(lonRaw).replace(',', '.').trim() : '';
+    const hasCoords = lat !== '' && lon !== '';
+    const mapUrl = hasCoords ? `https://www.google.com/maps?q=${encodeURIComponent(lat + ',' + lon)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(((data.addressLog || '') + ' ' + (data.addressNum || '') + ' ' + (data.addressBairro || '') + ' ' + (data.addressCity || '') + ' ' + (data.addressState || '')).trim())}`;
+
+    const addressText = `${data.addressLog ? `${data.addressLog}, ` : ''}${data.addressNum? `Número: ${data.addressNum}, ` : ''}${data.addressComp ? `Complemento: ${data.addressComp}, ` : ''}${data.addressBairro? `Bairro: ${data.addressBairro}, ` : ''}${data.addressCity? `${data.addressCity}, ` : ''}${data.addressState? `${data.addressState}, ` : ''}${data.addressCEP? `${data.addressCEP}` : ''}`;
+
+    // incluir informações sobre vítimas (se houver)
+    const victimsInfo = data.hasVictim ?
+      `Tem vítimas: Sim\nQuantidade de vítimas: ${data.victimsQuantity || '-'}\nEstado da(s) vítima(s): ${data.conditionVictim || '-'}` :
+      'Tem vítimas: Não';
+
+    const message = `Natureza: ${data.natOco || '-'}\nDescrição: ${data.description || '-'}\nEndereço: ${addressText || '-'}\n${victimsInfo}\nLocalização: ${mapUrl}`;
+
+    const url = `https://api.whatsapp.com/send?phone=${withCountry}&text=${encodeURIComponent(message)}`;
+
+    setSendingWhatsapp(true);
+    try {
+      const isWeb = typeof window !== 'undefined' && typeof window.open === 'function';
+      if (isWeb) window.open(url, '_blank');
+      else await Linking.openURL(url);
+      setWhatsappModalVisible(false);
+      setWhatsappNumberDisplay('');
+      setWhatsappNumberRaw('');
+    } catch (e) {
+      console.error('Erro ao abrir WhatsApp', e);
+      Alert.alert('Erro', 'Não foi possível abrir o WhatsApp: ' + (e.message || e));
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
+
   const listData = [{ id: 'none', displayName: 'Sem deslocamento de veículo', noVehicle: true }, ...vehicles.map((v, idx) => ({ id: v.id || `v-${idx}`, ...v }))];
   // derive selected vehicle objects for display in confirmation
   const selectedVehicles = selectedVehicleIds
@@ -287,10 +499,18 @@ const DetalheOcorrencia = ({ item, onBack }) => {
             <Text style={{color:'#900', fontWeight:'700', fontSize:24, textAlign:'center'}}>Esta ocorrência foi marcada como trote.</Text>
           </View>
         )}
+        {data.statusOccurrence === "FINALIZADO" && (
+          <View style={{backgroundColor:'#fae8cdff', padding:24, borderRadius:6, margin:4}}>
+            <Text style={{color:'#900', fontWeight:'700', fontSize:24, textAlign:'center'}}>Esta ocorrência foi marcada como FINALIZADA.</Text>
+          </View>
+        )}  
         <View style={styles.cardRed}>
           <View style={{flexDirection:'row', alignItems: 'center', justifyContent:'space-between'}}>
             <Text style={styles.title}>Detalhe da Ocorrência numero: {data.id}</Text>
             <View style={styles.header}>
+              <TouchableOpacity onPress={() => openFinalModal(data.statusOccurrence === 'FINALIZADO' ? 'reopen' : 'finalize')} style={styles.backButton} disabled={finalSending || troteSending}>
+                {finalSending ? <ActivityIndicator color="#fff" /> : <Text style={[styles.backText]}>{data.statusOccurrence === 'FINALIZADO' ? 'Reabrir' : 'Finalizar'}</Text>}
+              </TouchableOpacity>
               <TouchableOpacity onPress={handleTrote} style={styles.backButton} disabled={troteSending}>
                 {troteSending ? <ActivityIndicator color="#fff" /> : <Text style={[styles.backText]}>Trote</Text>}
               </TouchableOpacity>
@@ -331,15 +551,62 @@ const DetalheOcorrencia = ({ item, onBack }) => {
                 </View>
                 <View style={[styles.ContainerRow]} >
                   <Text style={styles.textSecondaryTitle}>Ocorrência: {data.natOco}</Text>
-                  <View style={[styles.rowPai]}>
-                    <View style={styles.row}>
+                  <View style={[styles.rowPai, {flexDirection:'colummn', justifyContent:'flex-start', alignItems:'flex-start'}]}>
+                    <View style={[styles.row, {justifyContent:'flex-start', alignItems:'flex-start'}]}>
                       <Text style={styles.key}>Descrição: </Text>
                       <Text style={styles.value}>{ data.description} </Text>
                     </View>
                     <View style={styles.row}>
                       <Text style={styles.key}>Endereço da ocorrência: </Text>
-                      <Text style={styles.value}>{`${data.addressLog ? `${data.addressLog}, ` : ''}${data.addressNum? `Número: ${data.addressNum}, ` : ''}${data.addressComp ? `Complemento: ${data.addressComp}, ` : ''}${data.addressBairro? `Bairro: ${data.addressBairro}, ` : ''}${data.addressCity? `Cidade: ${data.addressCity}, ` : ''}${data.addressState? `Estado: ${data.addressState}, ` : ''}${data.addressCEP? `CEP: ${data.addressCEP}.` : ''}`} </Text>
+                      <View style={{flex:1}}>
+                        <Text style={styles.value}>{`${data.addressLog ? `${data.addressLog}, ` : ''}${data.addressNum? `Número: ${data.addressNum}, ` : ''}${data.addressComp ? `Complemento: ${data.addressComp}, ` : ''}${data.addressBairro? `Bairro: ${data.addressBairro}, ` : ''}${data.addressCity? `Cidade: ${data.addressCity}, ` : ''}${data.addressState? `Estado: ${data.addressState}, ` : ''}${data.addressCEP? `CEP: ${data.addressCEP}.` : ''}`} </Text>
+                      </View>
                     </View>
+                    <View style={{flexDirection:'row', gap:8, marginTop:6}}>
+                      <TouchableOpacity style={styles.mapBtn} onPress={openInMaps}>
+                        <Text style={styles.mapBtnText}>Abrir no Google Maps 🗺️📍</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.whatsappBtn} onPress={() => setWhatsappModalVisible(true)}>
+                        <Text style={styles.whatsappBtnText}>Enviar por WhatsApp ↗️</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* WhatsApp modal */}
+                    <Modal
+                      visible={whatsappModalVisible}
+                      animationType="slide"
+                      transparent={true}
+                      onRequestClose={() => { setWhatsappModalVisible(false); setWhatsappNumberDisplay(''); setWhatsappNumberRaw(''); }}
+                    >
+                      <View style={styles.modalOverlay}>
+                        <View style={[styles.modalContent,{height:'auto'}]}>
+                          <Text style={styles.modalTitle}>Enviar por WhatsApp</Text>
+                          <Text style={{marginBottom:6}}>Informe o número (DDD + número).</Text>
+                          <TextInput
+                            style={styles.noteInput}
+                            placeholder="(65)99999-9999"
+                            value={whatsappNumberDisplay}
+                            onChangeText={(t) => {
+                              // accept only digits, update raw and formatted display
+                              const digits = String(t || '').replace(/\D/g, '');
+                              setWhatsappNumberRaw(digits);
+                              setWhatsappNumberDisplay(formatBRPhone(digits));
+                            }}
+                            keyboardType="phone-pad"
+                          />
+
+                          <View style={{flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'center'}}>
+                            <TouchableOpacity style={[styles.sendBtn, sendingWhatsapp ? styles.sendBtnDisabled : null]} onPress={sendWhatsApp} disabled={sendingWhatsapp}>
+                              {sendingWhatsapp ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendBtnText}>ENVIAR</Text>}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.closeBtn} onPress={() => { setWhatsappModalVisible(false); setWhatsappNumberDisplay(''); setWhatsappNumberRaw(''); }}>
+                              <Text style={styles.closeBtnText}>CANCELAR</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </Modal>
                   </View>                  
                 </View>
                 {data.hasVictim && (
@@ -403,6 +670,7 @@ const DetalheOcorrencia = ({ item, onBack }) => {
                 </View>
               </View>
             </Modal>
+            
 
             {/* Confirmation modal with observation and send */}
             <Modal
@@ -450,9 +718,81 @@ const DetalheOcorrencia = ({ item, onBack }) => {
         {/* render incident responses when occurrence is not in REGISTRADO state */}
         {data.statusOccurrence && data.statusOccurrence !== 'REGISTRADO' && (
           <View style={styles.cardYellow}>
-            <IncidentResponses occurrenceId={data.id} onBack={() => onBack && onBack()} />
+            <IncidentResponses occurrenceId={data.id} occurrenceStatus={data.statusOccurrence} onBack={() => onBack && onBack()} />
           </View>
         )}
+
+        {/* Finalização modal (renderizado fora do bloco REGISTRADO para estar sempre disponível) */}
+        <Modal
+          visible={finalModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => { setFinalModalVisible(false); setFinalResponses([]); setSelectedIncidentResponseId(null); }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{finalMode === 'reopen' ? 'Reabrir chamado' : 'Finalizar Atendimento'}</Text>
+
+              <Text style={{fontWeight:'600', marginBottom:6}}>{finalMode === 'reopen' ? 'Atendimento atual para reabertura: ' : 'Atendimento atual: '}</Text>
+              <View style={{maxHeight: 150}}>
+                {finalResponses && finalResponses.length > 0 ? (
+                  (() => {
+                    const current = finalResponses[0];
+                    return (
+                      <View style={styles.item}>
+                        <Text style={styles.itemText}>Atendimento #{current.id} — Iniciado: {current.dateInit ? new Date(current.dateInit).toLocaleString() : '-'}</Text>
+                        <Text style={styles.itemSub}>{current.userResponse ? `Atendente: ${current.userResponse.userName}` : ''}</Text>
+                        {current.incidentVehicles && current.incidentVehicles.length > 0 && (
+                          <Text style={styles.itemSub}>Veículos despachados: {current.incidentVehicles.map(v => v.vehicle ? (v.vehicle.placa || v.vehicle.plate) : (v.placa || v.plate || '-')).join(', ')}</Text>
+                        )}
+                      </View>
+                    );
+                  })()
+                ) : (
+                  <Text>{finalMode === 'reopen' ? 'Nenhum atendimento disponível para reabertura.' : 'Nenhum atendimento disponível para finalização.'}</Text>
+                )}
+              </View>
+
+              <View style={{marginTop:8}}>
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Horário de chegada ao local da ocorrência</Text>
+                  <Switch value={finalMarkArrivalOccurrence} onValueChange={(v) => { if (v) { setFinalMarkArrivalHospital(false); setFinalMarkReturnVehicle(false); } setFinalMarkArrivalOccurrence(v); }} />
+                </View>
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Horário de chegada ao hospital</Text>
+                  <Switch value={finalMarkArrivalHospital} onValueChange={(v) => { if (v) { setFinalMarkArrivalOccurrence(false); setFinalMarkReturnVehicle(false); } setFinalMarkArrivalHospital(v); }} />
+                </View>
+                <View style={styles.switchRow}>
+                  <Text style={styles.switchLabel}>Horário de retorno do veículo ao quartel</Text>
+                  <Switch value={finalMarkReturnVehicle} onValueChange={(v) => { if (v) { setFinalMarkArrivalOccurrence(false); setFinalMarkArrivalHospital(false); } setFinalMarkReturnVehicle(v); }} />
+                </View>
+              </View>
+
+              <Text style={{fontWeight:'600', marginTop:8}}>Descrição (obrigatório)</Text>
+              <TextInput
+                style={styles.noteInput}
+                placeholder={finalMode === 'reopen' ? 'Motivo da reabertura' : 'Descrição da finalização'}
+                value={finalDescription}
+                onChangeText={setFinalDescription}
+                multiline
+              />
+
+              <View style={{flexDirection: 'row', gap: 10, marginTop: 12, justifyContent: 'center'}}>
+                <TouchableOpacity
+                  style={[styles.sendBtn, (!selectedIncidentResponseId || finalSending) ? styles.sendBtnDisabled : null]}
+                  onPress={handleSendFinalization}
+                  disabled={!selectedIncidentResponseId || finalSending}
+                >
+                  {finalSending ? <ActivityIndicator color="#fff" /> : <Text style={styles.sendBtnText}>{finalMode === 'reopen' ? 'REABRIR' : 'CONFIRMAR'}</Text>}
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.closeBtn} onPress={() => { setFinalModalVisible(false); setFinalResponses([]); setSelectedIncidentResponseId(null); }}>
+                  <Text style={styles.closeBtnText}>CANCELAR</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
       </ScrollView>
     </View>
@@ -469,13 +809,13 @@ const styles = StyleSheet.create({
   cardRed: {
     margin: 15,
     borderRadius: 10,
-    backgroundColor: 'rgba(200,16,46,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.6)',
     padding: 24,
   },
   cardYellow: {
     margin: 15,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,0,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.6)',
     padding: 12,
   },
   list: {
@@ -575,6 +915,9 @@ const styles = StyleSheet.create({
       borderBottomWidth: 1,
       borderBottomColor: '#eee',
     },
+    itemSelected: {
+      backgroundColor: 'rgba(0,123,255,0.06)'
+    },
     itemText: {
       fontSize: 16,
       fontWeight: '600',
@@ -594,7 +937,6 @@ const styles = StyleSheet.create({
       minHeight: 40,
       textAlignVertical: 'top',
       width: '100%',
-      height: '50%',
     },
     closeBtn: {
       backgroundColor: '#ddd',
@@ -632,6 +974,30 @@ const styles = StyleSheet.create({
     continueBtnText: {
       color: '#fff',
       fontWeight: '700',
+    },
+    mapBtn: {
+      marginTop: 6,
+      alignSelf: 'flex-start',
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      backgroundColor: '#007bff',
+    },
+    mapBtnText: {
+      color: '#fff',
+      fontWeight: '600',
+    },
+    whatsappBtn: {
+      marginTop: 6,
+      alignSelf: 'flex-start',
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+      backgroundColor: '#25D366',
+    },
+    whatsappBtnText: {
+      color: '#fff',
+      fontWeight: '600',
     },
 });
 

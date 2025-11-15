@@ -14,7 +14,7 @@ const formatDate = (iso) => {
   }
 };
 
-const IncidentResponses = ({ occurrenceId, onBack }) => {
+const IncidentResponses = ({ occurrenceId, onBack, occurrenceStatus }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -64,6 +64,11 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
   }, [occurrenceId, user?.email]);
 
   const openActionModal = (incidentResponseId = null) => {
+    const isFinalized = String(occurrenceStatus || '').toUpperCase() === 'FINALIZADO';
+    if (isFinalized) {
+      Alert.alert('Ação não permitida', 'Ocorrência finalizada. Só é possível reabrir a ocorrência.');
+      return;
+    }
     setSelectedStatus(null);
     setActionDescription('');
     setShowStatusOptions(false);
@@ -76,6 +81,11 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
   };
 
   const sendActionStatus = async () => {
+    const isFinalized = String(occurrenceStatus || '').toUpperCase() === 'FINALIZADO';
+    if (isFinalized) {
+      Alert.alert('Ação não permitida', 'Ocorrência finalizada. Não é possível criar novos status.');
+      return;
+    }
     if (!selectedStatus) {
       Alert.alert('Preencha', 'Selecione um tipo de ação.');
       return;
@@ -148,9 +158,13 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
       <View style={[styles.bgWhite,styles.card]}>
         <Text style={styles.cardTitle}>Atendimento número: {item.id}</Text>
         <View style={{position:'absolute', right:12, top:12}}>
-          <TouchableOpacity style={[styles.btn, {paddingHorizontal:8, paddingVertical:6}]} onPress={() => openActionModal(item.id)}>
-            <Text style={styles.btnText}>Registrar nova interação</Text>
-          </TouchableOpacity>
+          { String(occurrenceStatus || '').toUpperCase() === 'FINALIZADO' ? (
+            <Text style={{color:'#900', fontWeight:'700'}}>Ocorrência finalizada</Text>
+          ) : (
+            <TouchableOpacity style={[styles.btn, {paddingHorizontal:8, paddingVertical:6}]} onPress={() => openActionModal(item.id)}>
+              <Text style={styles.btnText}>Registrar nova interação</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <Text style={styles.sub}>Iniciado em: {formatDate(item.dateInit)}</Text>
         <View style={styles.section}>        
@@ -221,7 +235,11 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Criar Ação {selectedIncidentResponseId ? `- Atendimento ${selectedIncidentResponseId}` : ''}</Text>
-
+            {String(occurrenceStatus || '').toUpperCase() === 'FINALIZADO' && (
+              <View style={{padding:8, backgroundColor:'#fff6f6', borderRadius:6, marginBottom:8}}>
+                <Text style={{color:'#900', fontWeight:'700', textAlign:'center'}}>Ocorrência finalizada — não é possível criar novas ações. Apenas reabrir é permitido.</Text>
+              </View>
+            )}
             <Text style={{fontWeight:'600', marginBottom:6}}>Selecione o tipo:</Text>
             <TouchableOpacity style={styles.dropButton} onPress={() => setShowStatusOptions((v) => !v)}>
               <Text>{selectedStatus || 'Selecione...'}</Text>
@@ -281,7 +299,11 @@ const IncidentResponses = ({ occurrenceId, onBack }) => {
             />
 
             <View style={{flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 12}}>
-              <TouchableOpacity style={[styles.sendActionBtn, sendingAction ? styles.sendActionBtnDisabled : null]} onPress={sendActionStatus} disabled={sendingAction}>
+              <TouchableOpacity
+                style={[styles.sendActionBtn, sendingAction ? styles.sendActionBtnDisabled : null, String(occurrenceStatus || '').toUpperCase() === 'FINALIZADO' ? {backgroundColor:'#ccc'} : null]}
+                onPress={sendActionStatus}
+                disabled={sendingAction || String(occurrenceStatus || '').toUpperCase() === 'FINALIZADO'}
+              >
                 <Text style={styles.sendActionBtnText}>{sendingAction ? 'ENVIANDO...' : 'ENVIAR'}</Text>
               </TouchableOpacity>
 
