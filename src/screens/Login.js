@@ -96,17 +96,17 @@ const styles = StyleSheet.create({
   container: {
     height: '100vh',
     width: '100%',
-    backgroundColor: '#c8102e',
+    backgroundColor: '#ff0000',
   },
   containerRow: {
     flexDirection: 'row',
-    backgroundColor: '#c8102e',
+    backgroundColor: '#ff0000',
   },
   containerColumn: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#c8102e',
+    backgroundColor: '#ff0000',
   },
   leftPane: {
     display: 'flex',
@@ -115,12 +115,12 @@ const styles = StyleSheet.create({
   },
   leftWide: {
     width: '50%',
-    backgroundColor: '#c8102e', // vermelho (ajustável)
+    backgroundColor: '#ff0000', // vermelho (ajustável)
   },
   leftNarrow: {
     width: '100%',
     padding: 20,
-    backgroundColor: '#c8102e',
+    backgroundColor: '#ff0000',
   },
   rightPane: {
     display: 'flex',
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   button: {
-    backgroundColor: '#c8102e',
+    backgroundColor: '#ff0000',
     paddingVertical: 12,
     borderRadius: 6,
     alignItems: 'center',
