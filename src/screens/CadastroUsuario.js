@@ -1,12 +1,13 @@
 // src/screens/CadastroUsuario.js
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, TouchableOpacity, Alert, Switch, Platform } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
-const CadastroUsuario = () => {
+const CadastroUsuario = ({ onSuccess, onCancel }) => {
   const { user } = useAuth();
 
   const [Email, setEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmSenha, setConfirmSenha] = useState('');
   const [userName, setUserName] = useState('');
@@ -64,16 +65,34 @@ const CadastroUsuario = () => {
   };
 
   const handleCepChange = (text) => {
-    const numericRegex = /^\d*$/;
-    if (numericRegex.test(text) || text === '') {
-      setAddressCEP(text);
+    // permite apenas dígitos e aplica máscara 00000-000 enquanto digita
+    const digits = (text || '').replace(/\D/g, '').slice(0, 8);
+    let formatted = digits;
+    if (digits.length > 5) {
+      formatted = digits.slice(0, 5) + '-' + digits.slice(5);
     }
+    setAddressCEP(formatted);
+  };
+
+  // Wrapper para exibir alertas; usa `window.alert` em Windows/Web quando disponível
+  const showAlert = (title, message) => {
+    try {
+      if ((Platform && Platform.OS === 'windows') || Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          window.alert((title ? title + '\n\n' : '') + (message || ''));
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore and fall back to Alert.alert
+    }
+    Alert.alert(title, message);
   };
 
   const handleBuscarCep = async () => {
     const cep = addressCEP.replace(/\D/g, '');
     if (!cep || cep.length !== 8) {
-      Alert.alert('CEP inválido', 'Informe um CEP com 8 dígitos.');
+      showAlert('CEP inválido', 'Informe um CEP com 8 dígitos.');
       return;
     }
 
@@ -81,7 +100,7 @@ const CadastroUsuario = () => {
       const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const data = await res.json();
       if (data.erro) {
-        Alert.alert('CEP não encontrado', 'Verifique o CEP informado.');
+        showAlert('CEP não encontrado', 'Verifique o CEP informado.');
         return;
       }
 
@@ -93,7 +112,7 @@ const CadastroUsuario = () => {
       setAddressIbge(data.ibge || '');
     } catch (e) {
       console.error('Erro ao buscar CEP', e);
-      Alert.alert('Erro', 'Não foi possível buscar o CEP.');
+      showAlert('Erro', 'Não foi possível buscar o CEP.');
     }
   };
 
@@ -119,21 +138,33 @@ const CadastroUsuario = () => {
   };
 
   const handleCadastrar = async () => {
+    // Validação de e-mails: devem existir e ser iguais
+    const emailTrim = (Email || '').trim();
+    const emailConfirmTrim = (confirmEmail || '').trim();
+    if (!emailTrim) {
+      showAlert('Email inválido', 'Informe o email.');
+      return;
+    }
+    if (emailTrim.toLowerCase() !== emailConfirmTrim.toLowerCase()) {
+      showAlert('Emails diferentes', 'Os emails informados não coincidem.');
+      return;
+    }
+
     // Validação de senhas: devem existir e ser iguais
     const pwd = (senha || '').trim();
     const confirmPwd = (confirmSenha || '').trim();
     if (!pwd) {
-      Alert.alert('Senha inválida', 'Informe a senha.');
+      showAlert('Senha inválida', 'Informe a senha.');
       return;
     }
     if (pwd !== confirmPwd) {
-      Alert.alert('Senhas diferentes', 'As senhas informadas não coincidem.');
+      showAlert('Senhas diferentes', 'As senhas informadas não coincidem.');
       return;
     }
 
     // Validação CPF
     if (cpf && !isValidCPF(cpf)) {
-      Alert.alert('CPF inválido', 'Verifique o CPF informado.');
+      showAlert('CPF inválido', 'Verifique o CPF informado.');
       return;
     }
 
@@ -168,23 +199,31 @@ const CadastroUsuario = () => {
       if (!res.ok) {
         const text = await res.text();
         console.error('Erro no cadastro:', res.status, text);
-        Alert.alert('Erro', 'Falha ao cadastrar usuário.');
+        showAlert('Erro', 'Falha ao cadastrar usuário.');
         return;
       }
 
       const result = await res.json();
       console.log('Cadastro realizado:', result);
-      Alert.alert('Sucesso', 'Usuário cadastrado com sucesso.');
+      showAlert('Sucesso', 'Usuário cadastrado com sucesso.');
       // opcional: limpar campos
+      if (typeof onSuccess === 'function') {
+        try {
+          onSuccess();
+        } catch (e) {
+          console.error('Erro ao executar onSuccess prop:', e);
+        }
+      }
     } catch (e) {
       console.error('Erro ao enviar cadastro', e);
-      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
+      showAlert('Erro', 'Não foi possível conectar ao servidor.');
     }
   };
   
   const handleCancelar = () => {
     // Lógica para cancelar e voltar
     console.log('Cancelado');
+    if (typeof onCancel === 'function') onCancel();
   };
 
   return (
@@ -199,6 +238,16 @@ const CadastroUsuario = () => {
             placeholder="Email"
             value={Email}
             onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Confirmar Email"
+            value={confirmEmail}
+            onChangeText={setConfirmEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
           />
           
           <TextInput
@@ -253,20 +302,22 @@ const CadastroUsuario = () => {
           {/* CEP antes do endereço */}
           <TextInput
             style={styles.input}
-            placeholder="CEP (apenas números)"
+            placeholder="CEP (ex: 78000-000)"
             value={addressCEP}
             onChangeText={handleCepChange}
             keyboardType="numeric"
+            maxLength={9}
           />
           <TouchableOpacity style={[styles.submitButton, {marginTop: 0, marginBottom: 10}]} onPress={handleBuscarCep}>
             <Text style={styles.buttonText}>BUSCAR CEP</Text>
           </TouchableOpacity>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputDisabled]}
             placeholder="Logradouro"
             value={addressStreet}
             onChangeText={setAddressStreet}
+            editable={false}
           />
 
           <TextInput
@@ -278,38 +329,43 @@ const CadastroUsuario = () => {
           />
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputDisabled]}
             placeholder="Bairro"
             value={addressDistrict}
             onChangeText={setAddressDistrict}
+            editable={false}
           />
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputDisabled]}
             placeholder="Cidade"
             value={addressCity}
             onChangeText={setAddressCity}
+            editable={false}
           />
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputDisabled]}
             placeholder="Estado (UF)"
             value={addressState}
             onChangeText={setAddressState}
+            editable={false}
           />
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputDisabled]}
             placeholder="Complemento (opcional)"
             value={addressComp}
             onChangeText={setAddressComp}
+            editable={false}
           />
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.inputDisabled]}
             placeholder="IBGE (opcional)"
             value={addressIbge}
             onChangeText={setAddressIbge}
+            editable={false}
           />
 
           
@@ -391,6 +447,10 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 15,
     borderRadius: 8,
+  },
+  inputDisabled: {
+    backgroundColor: '#f0f0f0',
+    color: '#6c6c6c',
   },
   switchContainer: {
     flexDirection: 'row',
