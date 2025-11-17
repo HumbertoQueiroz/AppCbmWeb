@@ -159,7 +159,7 @@ const CadastroUsuario = () => {
     };
 
     try {
-      const res = await fetch('/create-admin', {
+      const res = await fetch('https://cbm-app-6qeks.ondigitalocean.app/create-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
